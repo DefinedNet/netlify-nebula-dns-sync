@@ -9,6 +9,18 @@ DOMAIN="${DOMAIN:?Set DOMAIN to your domain (e.g. example.com)}"
 
 NETLIFY_API="https://api.netlify.com/api/v1"
 
+api() {
+  local response http_code body
+  response=$(curl -s -w '\n%{http_code}' "$@")
+  http_code=$(echo "$response" | tail -1)
+  body=$(echo "$response" | sed '$d')
+  if [ "$http_code" -ge 400 ]; then
+    echo "Error: HTTP $http_code — $body" >&2
+    return 1
+  fi
+  echo "$body"
+}
+
 sanitize() {
   echo "$1" \
     | tr '[:upper:]' '[:lower:]' \
@@ -23,10 +35,10 @@ cursor=""
 all_hosts="[]"
 while true; do
   if [ -z "$cursor" ]; then
-    page=$(curl -sf -H "Authorization: Bearer $DN_API_KEY" \
+    page=$(api -H "Authorization: Bearer $DN_API_KEY" \
       "https://api.defined.net/v2/hosts")
   else
-    page=$(curl -sf -H "Authorization: Bearer $DN_API_KEY" \
+    page=$(api -H "Authorization: Bearer $DN_API_KEY" \
       "https://api.defined.net/v2/hosts?cursor=$cursor")
   fi
 
@@ -63,7 +75,7 @@ desired=$(echo "$all_hosts" | jq -r --arg sub "$SUBDOMAIN" --arg dom "$DOMAIN" '
 ')
 
 # Fetch existing DNS records from Netlify, filtered to our subdomain
-existing=$(curl -sf \
+existing=$(api \
   -H "Authorization: Bearer $NETLIFY_TOKEN" \
   "$NETLIFY_API/dns_zones/$NETLIFY_ZONE_ID/dns_records" \
   | jq --arg suffix ".$SUBDOMAIN.$DOMAIN" \
@@ -75,7 +87,7 @@ echo "$existing" | jq -r '.[] | [.id, .hostname, .type, .value] | @tsv' | while 
     '[.[] | select(.hostname == $h and .type == $t and .value == $v)] | length')
   if [ "$match" -eq 0 ]; then
     echo "Deleting stale record: $type $hostname -> $value"
-    curl -sf -X DELETE \
+    api -X DELETE \
       -H "Authorization: Bearer $NETLIFY_TOKEN" \
       "$NETLIFY_API/dns_zones/$NETLIFY_ZONE_ID/dns_records/$id" > /dev/null
   fi
@@ -92,7 +104,7 @@ echo "$desired" | jq -c '.[]' | while read -r record; do
     '[.[] | select(.hostname == $h and .type == $t and .value == $v)] | length')
   if [ "$match" -eq 0 ]; then
     echo "Creating record: $type $hostname -> $value"
-    curl -sf -X POST \
+    api -X POST \
       -H "Authorization: Bearer $NETLIFY_TOKEN" \
       -H "Content-Type: application/json" \
       -d "{\"type\": \"$type\", \"hostname\": \"$hostname\", \"value\": \"$value\", \"ttl\": 3600}" \
