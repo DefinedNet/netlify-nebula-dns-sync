@@ -13,7 +13,6 @@ jobs:
         env:
           DN_API_KEY: ${{ secrets.DN_API_KEY }}
           NETLIFY_TOKEN: ${{ secrets.NETLIFY_TOKEN }}
-          NETLIFY_ZONE_ID: ${{ secrets.NETLIFY_ZONE_ID }}
-          SUBDOMAIN: dn
           DOMAIN: example.com
+          SUBDOMAIN: dn
         run: ./sync-nebula-dns.sh

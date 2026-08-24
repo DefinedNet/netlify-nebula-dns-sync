@@ -3,9 +3,8 @@ set -euo pipefail
 
 DN_API_KEY="${DN_API_KEY:?Set DN_API_KEY to your Defined Networking API key}"
 NETLIFY_TOKEN="${NETLIFY_TOKEN:?Set NETLIFY_TOKEN to your Netlify personal access token}"
-NETLIFY_ZONE_ID="${NETLIFY_ZONE_ID:?Set NETLIFY_ZONE_ID to your Netlify DNS zone ID}"
-SUBDOMAIN="${SUBDOMAIN:-dn}"
 DOMAIN="${DOMAIN:?Set DOMAIN to your domain (e.g. example.com)}"
+SUBDOMAIN="${SUBDOMAIN:-dn}"
 
 NETLIFY_API="https://api.netlify.com/api/v1"
 
@@ -29,6 +28,20 @@ sanitize() {
     | sed 's/--*/-/g' \
     | sed 's/^-//;s/-$//'
 }
+
+# Look up the Netlify DNS zone ID from the domain name
+NETLIFY_ZONE_ID=$(api \
+  -H "Authorization: Bearer $NETLIFY_TOKEN" \
+  "$NETLIFY_API/dns_zones" \
+  | jq -r --arg dom "$DOMAIN" '.[] | select(.name == $dom) | .id' \
+  | head -1)
+
+if [ -z "$NETLIFY_ZONE_ID" ]; then
+  echo "Error: no Netlify DNS zone found for $DOMAIN" >&2
+  exit 1
+fi
+
+echo "Found zone $NETLIFY_ZONE_ID for $DOMAIN"
 
 # Fetch all hosts from the DN API, handling pagination
 cursor=""
@@ -55,22 +68,19 @@ done
 echo "$all_hosts" | jq -r '
   [.[] | {
     original: .name,
-    label: (.name | ascii_downcase | gsub("['\''ʼ']"; "") | gsub("[^a-z0-9-]"; "-") | gsub("-+"; "-") | gsub("^-|-$"; ""))
+    label: (.name | ascii_downcase | gsub("['\''ʼ'\'']"; "") | gsub("[^a-z0-9-]"; "-") | gsub("-+"; "-") | gsub("^-|-$"; ""))
   }] | group_by(.label) | map(select(length > 1)) | .[] |
   "Warning: \([.[].original] | map("\"" + . + "\"") | join(" and ")) both sanitize to \"\(.[0].label)\""
 ' >&2
 
 # Build the desired record set from the host list
-# Netlify hostnames are relative to the zone, so "db-01.dn" becomes "db-01.dn.example.com"
 desired=$(echo "$all_hosts" | jq -r --arg sub "$SUBDOMAIN" --arg dom "$DOMAIN" '
   [.[] | {
     name: .name,
     addresses: .ipAddresses
   }] | map(
-    (.name | ascii_downcase | gsub("['\''ʼ'\'']"; "") | gsub("[^a-z0-9-]"; "-") | gsub("-+"; "-") | gsub("^-|-$"; "")) as $label |
-    .addresses[] | {
-      hostname: ($label + "." + $sub + "." + $dom),
-      api_hostname: ($label + "." + $sub),
+    .name as $n | .addresses[] | {
+      hostname: ($n | ascii_downcase | gsub("['\''ʼ'\'']"; "") | gsub("[^a-z0-9-]"; "-") | gsub("-+"; "-") | gsub("^-|-$"; "")) + "." + $sub + "." + $dom,
       type: (if test(":") then "AAAA" else "A" end),
       value: .
     }
@@ -100,7 +110,6 @@ done
 created=0
 echo "$desired" | jq -c '.[]' | while read -r record; do
   hostname=$(echo "$record" | jq -r '.hostname')
-  api_hostname=$(echo "$record" | jq -r '.api_hostname')
   type=$(echo "$record" | jq -r '.type')
   value=$(echo "$record" | jq -r '.value')
 
@@ -111,7 +120,7 @@ echo "$desired" | jq -c '.[]' | while read -r record; do
     api -X POST \
       -H "Authorization: Bearer $NETLIFY_TOKEN" \
       -H "Content-Type: application/json" \
-      -d "{\"type\": \"$type\", \"hostname\": \"$api_hostname\", \"value\": \"$value\", \"ttl\": 3600}" \
+      -d "{\"type\": \"$type\", \"hostname\": \"$hostname\", \"value\": \"$value\", \"ttl\": 3600}" \
       "$NETLIFY_API/dns_zones/$NETLIFY_ZONE_ID/dns_records" > /dev/null
     created=$((created + 1))
   fi
