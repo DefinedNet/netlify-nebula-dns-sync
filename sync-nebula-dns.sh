@@ -68,7 +68,7 @@ done
 echo "$all_hosts" | jq -r '
   [.[] | {
     original: .name,
-    label: (.name | ascii_downcase | gsub("['\''ʼ'\'']"; "") | gsub("[^a-z0-9-]"; "-") | gsub("-+"; "-") | gsub("^-|-$"; ""))
+    label: (.name | ascii_downcase | gsub("[\u0027\u2018\u2019\u02bc]"; "") | gsub("[^a-z0-9-]"; "-") | gsub("-+"; "-") | gsub("^-|-$"; ""))
   }] | group_by(.label) | map(select(length > 1)) | .[] |
   "Warning: \([.[].original] | map("\"" + . + "\"") | join(" and ")) both sanitize to \"\(.[0].label)\""
 ' >&2
@@ -80,7 +80,7 @@ desired=$(echo "$all_hosts" | jq -r --arg sub "$SUBDOMAIN" --arg dom "$DOMAIN" '
     addresses: .ipAddresses
   }] | map(
     .name as $n | .addresses[] | {
-      hostname: ($n | ascii_downcase | gsub("['\''ʼ'\'']"; "") | gsub("[^a-z0-9-]"; "-") | gsub("-+"; "-") | gsub("^-|-$"; "")) + "." + $sub + "." + $dom,
+      hostname: ($n | ascii_downcase | gsub("[\u0027\u2018\u2019\u02bc]"; "") | gsub("[^a-z0-9-]"; "-") | gsub("-+"; "-") | gsub("^-|-$"; "")) + "." + $sub + "." + $dom,
       type: (if test(":") then "AAAA" else "A" end),
       value: .
     }
