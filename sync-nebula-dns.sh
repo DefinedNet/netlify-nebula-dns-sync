@@ -80,7 +80,7 @@ desired=$(echo "$all_hosts" | jq -r --arg sub "$SUBDOMAIN" --arg dom "$DOMAIN" '
     addresses: .ipAddresses
   }] | map(
     .name as $n | .addresses[] | {
-      hostname: ($n | ascii_downcase | gsub("[\u0027\u2018\u2019\u02bc]"; "") | gsub("[^a-z0-9-]"; "-") | gsub("-+"; "-") | gsub("^-|-$"; "")) + "." + $sub + "." + $dom,
+      hostname: (($n | ascii_downcase | gsub("[\u0027\u2018\u2019\u02bc]"; "") | gsub("[^a-z0-9-]"; "-") | gsub("-+"; "-") | gsub("^-|-$"; "")) + "." + $sub + "." + $dom),
       type: (if test(":") then "AAAA" else "A" end),
       value: .
     }
