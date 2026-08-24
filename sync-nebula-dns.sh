@@ -5,7 +5,7 @@ DN_API_KEY="${DN_API_KEY:?Set DN_API_KEY to your Defined Networking API key}"
 NETLIFY_TOKEN="${NETLIFY_TOKEN:?Set NETLIFY_TOKEN to your Netlify personal access token}"
 NETLIFY_ZONE_ID="${NETLIFY_ZONE_ID:?Set NETLIFY_ZONE_ID to your Netlify DNS zone ID}"
 SUBDOMAIN="${SUBDOMAIN:-dn}"
-DOMAIN="${DOMAIN:-example.com}"
+DOMAIN="${DOMAIN:?Set DOMAIN to your domain (e.g. example.com)}"
 
 NETLIFY_API="https://api.netlify.com/api/v1"
 
