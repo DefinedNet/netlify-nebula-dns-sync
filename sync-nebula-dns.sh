@@ -61,13 +61,16 @@ echo "$all_hosts" | jq -r '
 ' >&2
 
 # Build the desired record set from the host list
+# Netlify hostnames are relative to the zone, so "db-01.dn" becomes "db-01.dn.example.com"
 desired=$(echo "$all_hosts" | jq -r --arg sub "$SUBDOMAIN" --arg dom "$DOMAIN" '
   [.[] | {
     name: .name,
     addresses: .ipAddresses
   }] | map(
-    .name as $n | .addresses[] | {
-      hostname: ($n | ascii_downcase | gsub("['\''ʼ']"; "") | gsub("[^a-z0-9-]"; "-") | gsub("-+"; "-") | gsub("^-|-$"; "")) + "." + $sub + "." + $dom,
+    (.name | ascii_downcase | gsub("['\''ʼ'\'']"; "") | gsub("[^a-z0-9-]"; "-") | gsub("-+"; "-") | gsub("^-|-$"; "")) as $label |
+    .addresses[] | {
+      hostname: ($label + "." + $sub + "." + $dom),
+      api_hostname: ($label + "." + $sub),
       type: (if test(":") then "AAAA" else "A" end),
       value: .
     }
@@ -97,6 +100,7 @@ done
 created=0
 echo "$desired" | jq -c '.[]' | while read -r record; do
   hostname=$(echo "$record" | jq -r '.hostname')
+  api_hostname=$(echo "$record" | jq -r '.api_hostname')
   type=$(echo "$record" | jq -r '.type')
   value=$(echo "$record" | jq -r '.value')
 
@@ -107,7 +111,7 @@ echo "$desired" | jq -c '.[]' | while read -r record; do
     api -X POST \
       -H "Authorization: Bearer $NETLIFY_TOKEN" \
       -H "Content-Type: application/json" \
-      -d "{\"type\": \"$type\", \"hostname\": \"$hostname\", \"value\": \"$value\", \"ttl\": 3600}" \
+      -d "{\"type\": \"$type\", \"hostname\": \"$api_hostname\", \"value\": \"$value\", \"ttl\": 3600}" \
       "$NETLIFY_API/dns_zones/$NETLIFY_ZONE_ID/dns_records" > /dev/null
     created=$((created + 1))
   fi
