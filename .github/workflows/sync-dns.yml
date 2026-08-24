@@ -1,0 +1,19 @@
+name: Sync Nebula DNS
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sync DNS records
+        env:
+          DN_API_KEY: ${{ secrets.DN_API_KEY }}
+          NETLIFY_TOKEN: ${{ secrets.NETLIFY_TOKEN }}
+          NETLIFY_ZONE_ID: ${{ secrets.NETLIFY_ZONE_ID }}
+          SUBDOMAIN: dn
+          DOMAIN: example.com
+        run: ./sync-nebula-dns.sh
