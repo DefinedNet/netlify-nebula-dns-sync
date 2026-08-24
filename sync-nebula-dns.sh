@@ -20,15 +20,6 @@ api() {
   echo "$body"
 }
 
-sanitize() {
-  echo "$1" \
-    | tr '[:upper:]' '[:lower:]' \
-    | sed "s/['''ʼ]//g" \
-    | sed 's/[^a-z0-9-]/-/g' \
-    | sed 's/--*/-/g' \
-    | sed 's/^-//;s/-$//'
-}
-
 # Look up the Netlify DNS zone ID from the domain name
 NETLIFY_ZONE_ID=$(api \
   -H "Authorization: Bearer $NETLIFY_TOKEN" \
@@ -70,7 +61,7 @@ echo "$all_hosts" | jq -r '
     original: .name,
     label: (.name | ascii_downcase | gsub("[\u0027\u2018\u2019\u02bc]"; "") | gsub("[^a-z0-9-]"; "-") | gsub("-+"; "-") | gsub("^-|-$"; ""))
   }] | group_by(.label) | map(select(length > 1)) | .[] |
-  "Warning: \([.[].original] | map("\"" + . + "\"") | join(" and ")) both sanitize to \"\(.[0].label)\""
+  "Warning: \([.[].original] | map("\"" + . + "\"") | join(", ")) \(if length == 2 then "both" else "all" end) sanitize to \"\(.[0].label)\""
 ' >&2
 
 # Build the desired record set from the host list
@@ -88,11 +79,20 @@ desired=$(echo "$all_hosts" | jq -r --arg sub "$SUBDOMAIN" --arg dom "$DOMAIN" '
 ')
 
 # Fetch existing DNS records from Netlify, filtered to our subdomain
-existing=$(api \
-  -H "Authorization: Bearer $NETLIFY_TOKEN" \
-  "$NETLIFY_API/dns_zones/$NETLIFY_ZONE_ID/dns_records" \
-  | jq --arg suffix ".$SUBDOMAIN.$DOMAIN" \
+existing="[]"
+dns_page=1
+while true; do
+  dns_batch=$(api \
+    -H "Authorization: Bearer $NETLIFY_TOKEN" \
+    "$NETLIFY_API/dns_zones/$NETLIFY_ZONE_ID/dns_records?per_page=100&page=$dns_page")
+  filtered=$(echo "$dns_batch" | jq --arg suffix ".$SUBDOMAIN.$DOMAIN" \
     '[.[] | select(.hostname | endswith($suffix)) | select(.type == "A" or .type == "AAAA")]')
+  existing=$(echo "$existing $filtered" | jq -s '.[0] + .[1]')
+  if [ "$(echo "$dns_batch" | jq 'length')" -lt 100 ]; then
+    break
+  fi
+  dns_page=$((dns_page + 1))
+done
 
 # Delete stale records (exist in Netlify but not in desired set)
 echo "$existing" | jq -r '.[] | [.id, .hostname, .type, .value] | @tsv' | while IFS=$'\t' read -r id hostname type value; do
@@ -107,7 +107,6 @@ echo "$existing" | jq -r '.[] | [.id, .hostname, .type, .value] | @tsv' | while 
 done
 
 # Create missing records (exist in desired set but not in Netlify)
-created=0
 echo "$desired" | jq -c '.[]' | while read -r record; do
   hostname=$(echo "$record" | jq -r '.hostname')
   type=$(echo "$record" | jq -r '.type')
@@ -120,9 +119,9 @@ echo "$desired" | jq -c '.[]' | while read -r record; do
     api -X POST \
       -H "Authorization: Bearer $NETLIFY_TOKEN" \
       -H "Content-Type: application/json" \
-      -d "{\"type\": \"$type\", \"hostname\": \"$hostname\", \"value\": \"$value\", \"ttl\": 3600}" \
+      -d "$(jq -n --arg type "$type" --arg hostname "$hostname" --arg value "$value" \
+        '{type: $type, hostname: $hostname, value: $value, ttl: 3600}')" \
       "$NETLIFY_API/dns_zones/$NETLIFY_ZONE_ID/dns_records" > /dev/null
-    created=$((created + 1))
   fi
 done
 
