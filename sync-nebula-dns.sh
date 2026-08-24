@@ -79,20 +79,11 @@ desired=$(echo "$all_hosts" | jq -r --arg sub "$SUBDOMAIN" --arg dom "$DOMAIN" '
 ')
 
 # Fetch existing DNS records from Netlify, filtered to our subdomain
-existing="[]"
-dns_page=1
-while true; do
-  dns_batch=$(api \
-    -H "Authorization: Bearer $NETLIFY_TOKEN" \
-    "$NETLIFY_API/dns_zones/$NETLIFY_ZONE_ID/dns_records?per_page=100&page=$dns_page")
-  filtered=$(echo "$dns_batch" | jq --arg suffix ".$SUBDOMAIN.$DOMAIN" \
+existing=$(api \
+  -H "Authorization: Bearer $NETLIFY_TOKEN" \
+  "$NETLIFY_API/dns_zones/$NETLIFY_ZONE_ID/dns_records" \
+  | jq --arg suffix ".$SUBDOMAIN.$DOMAIN" \
     '[.[] | select(.hostname | endswith($suffix)) | select(.type == "A" or .type == "AAAA")]')
-  existing=$(echo "$existing $filtered" | jq -s '.[0] + .[1]')
-  if [ "$(echo "$dns_batch" | jq 'length')" -lt 100 ]; then
-    break
-  fi
-  dns_page=$((dns_page + 1))
-done
 
 # Delete stale records (exist in Netlify but not in desired set)
 echo "$existing" | jq -r '.[] | [.id, .hostname, .type, .value] | @tsv' | while IFS=$'\t' read -r id hostname type value; do
