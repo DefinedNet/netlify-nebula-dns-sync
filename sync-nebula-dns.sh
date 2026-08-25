@@ -61,7 +61,7 @@ echo "$all_hosts" | jq -r '
     original: .name,
     label: (.name | ascii_downcase | gsub("[\u0027\u2018\u2019\u02bc]"; "") | gsub("[^a-z0-9-]"; "-") | gsub("-+"; "-") | gsub("^-|-$"; ""))
   }] | group_by(.label) | map(select(length > 1)) | .[] |
-  "Warning: \([.[].original] | map("\"" + . + "\"") | join(", ")) \(if length == 2 then "both" else "all" end) sanitize to \"\(.[0].label)\""
+  "::warning::\([.[].original] | map("\"" + . + "\"") | join(", ")) \(if length == 2 then "both" else "all" end) sanitize to \"\(.[0].label)\""
 ' >&2
 
 # Build the desired record set from the host list
