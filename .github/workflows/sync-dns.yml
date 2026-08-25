@@ -1,7 +1,10 @@
 name: Sync Nebula DNS
 on:
-  schedule:
-    - cron: "*/15 * * * *"
+  # The schedule ships commented out so a repo generated from this template
+  # (and the template itself) doesn't run and fail before secrets exist.
+  # Uncomment after adding DN_API_KEY and NETLIFY_TOKEN as repository secrets:
+  # schedule:
+  #   - cron: "*/15 * * * *"
   workflow_dispatch:
 
 jobs:
