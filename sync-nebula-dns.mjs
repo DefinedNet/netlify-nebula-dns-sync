@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Sync Defined Networking host names into a Netlify DNS zone as A/AAAA records.
-// Requires Node.js 20 or newer; no dependencies.
+// Sync Defined Networking host names into a Netlify DNS zone as A/AAAA records, then tag each
+// host that has one with dns:synced. Requires Node.js 20 or newer; no dependencies.
 import { domainToASCII, domainToUnicode } from "node:url";
 
 const DN_API_KEY = required("DN_API_KEY", "your Defined Networking API key");
@@ -28,7 +28,7 @@ async function api(url, token, init = {}) {
   const body = await res.text();
   return body ? JSON.parse(body) : null;
 }
-const dn = (path) => api(`https://api.defined.net${path}`, DN_API_KEY);
+const dn = (path, init) => api(`https://api.defined.net${path}`, DN_API_KEY, init);
 const netlify = (path, init) => api(`https://api.netlify.com/api/v1${path}`, NETLIFY_TOKEN, init);
 
 // Turn a host name into a DNS label. Letters, digits, dashes and emoji from any script
@@ -81,7 +81,9 @@ do {
 
 // Sanitize each host name into a DNS label
 const labeled = hosts.map((host) => ({
+  id: host.id,
   name: host.name,
+  tags: host.tags,
   addresses: host.ipAddresses,
   label: toLabel(host.name),
 }));
@@ -136,6 +138,16 @@ for (const r of desired.filter((r) => !existingKeys.has(key(r)))) {
     method: "POST",
     body: JSON.stringify({ ...r, ttl: 3600 }),
   });
+}
+
+// Tag every host that has a record and untag the rest, so the admin panel shows which names
+// resolve. Fields left out of the PUT body keep their current values.
+const SYNCED = "dns:synced";
+for (const h of labeled) {
+  if (h.tags.includes(SYNCED) === Boolean(h.label)) continue;
+  const tags = h.label ? [...h.tags, SYNCED] : h.tags.filter((t) => t !== SYNCED);
+  console.log(`${h.label ? "Tagging" : "Untagging"} "${h.name}" ${SYNCED}`);
+  await dn(`/v3/hosts/${h.id}`, { method: "PUT", body: JSON.stringify({ tags }) });
 }
 
 console.log("Sync complete.");
