@@ -18,4 +18,4 @@ jobs:
           NETLIFY_TOKEN: ${{ secrets.NETLIFY_TOKEN }}
           DOMAIN: example.com
           SUBDOMAIN: dn
-        run: ./sync-nebula-dns.sh
+        run: node sync-nebula-dns.mjs
