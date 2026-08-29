@@ -79,14 +79,8 @@ do {
   cursor = page.metadata.hasNextPage ? page.metadata.nextCursor : "";
 } while (cursor);
 
-// Sanitize each host name into a DNS label
-const labeled = hosts.map((host) => ({
-  id: host.id,
-  name: host.name,
-  tags: host.tags,
-  addresses: host.ipAddresses,
-  label: toLabel(host.name),
-}));
+// Sanitize each host name into a DNS label, keeping the rest of the host record
+const labeled = hosts.map((host) => ({ ...host, label: toLabel(host.name) }));
 
 // Warn about names with no usable label (they get no record) and about collisions
 for (const { name } of labeled.filter((h) => !h.label))
@@ -106,7 +100,7 @@ for (const [label, names] of byLabel) {
 const desired = labeled
   .filter((h) => h.label)
   .flatMap((h) =>
-    h.addresses.map((value) => ({
+    h.ipAddresses.map((value) => ({
       hostname: `${h.label}.${SUBDOMAIN}.${DOMAIN}`,
       type: value.includes(":") ? "AAAA" : "A",
       value,
@@ -141,13 +135,18 @@ for (const r of desired.filter((r) => !existingKeys.has(key(r)))) {
 }
 
 // Tag every host that has a record and untag the rest, so the admin panel shows which names
-// resolve. Fields left out of the PUT body keep their current values.
+// resolve. Editing a host resets every field the request leaves out, so each PUT sends the host
+// back whole and changes only its tags.
 const SYNCED = "dns:synced";
 for (const h of labeled) {
   if (h.tags.includes(SYNCED) === Boolean(h.label)) continue;
   const tags = h.label ? [...h.tags, SYNCED] : h.tags.filter((t) => t !== SYNCED);
   console.log(`${h.label ? "Tagging" : "Untagging"} "${h.name}" ${SYNCED}`);
-  await dn(`/v3/hosts/${h.id}`, { method: "PUT", body: JSON.stringify({ tags }) });
+  const { name, roleID, staticAddresses, listenPort, configOverrides } = h;
+  await dn(`/v3/hosts/${h.id}`, {
+    method: "PUT",
+    body: JSON.stringify({ name, roleID, staticAddresses, listenPort, configOverrides, tags }),
+  });
 }
 
 console.log("Sync complete.");
