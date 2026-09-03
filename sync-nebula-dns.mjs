@@ -74,7 +74,7 @@ console.log(`Found zone ${zone.id} for ${DOMAIN}`);
 const hosts = [];
 let cursor = "";
 do {
-  const page = await dn(`/v2/hosts${cursor && `?cursor=${cursor}`}`);
+  const page = await dn(`/v2/hosts${cursor && `?cursor=${encodeURIComponent(cursor)}`}`);
   hosts.push(...page.data);
   cursor = page.metadata.hasNextPage ? page.metadata.nextCursor : "";
 } while (cursor);
