@@ -6,7 +6,7 @@ import { domainToASCII, domainToUnicode } from "node:url";
 const DN_API_KEY = required("DN_API_KEY", "your Defined Networking API key");
 const NETLIFY_TOKEN = required("NETLIFY_TOKEN", "a Netlify personal access token");
 const DOMAIN = required("DOMAIN", "the domain of your Netlify DNS zone");
-const SUBDOMAIN = process.env.SUBDOMAIN ?? "dn";
+const SUBDOMAIN = process.env.SUBDOMAIN || "dn";
 
 function required(name, what) {
   if (!process.env[name]) {
@@ -59,7 +59,7 @@ const warn = (message) => console.warn(`::warning::${message}`);
 // A punycode hostname is logged with its Unicode spelling alongside, e.g. "xn--fr8h.dn.example.com (💀.dn.example.com)"
 const shown = (hostname) => {
   const unicode = domainToUnicode(hostname);
-  return unicode === hostname ? hostname : `${hostname} (${unicode})`;
+  return unicode && unicode !== hostname ? `${hostname} (${unicode})` : hostname;
 };
 
 // Look up the Netlify DNS zone ID from the domain name
