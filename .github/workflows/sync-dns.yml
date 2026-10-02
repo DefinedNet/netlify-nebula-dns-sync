@@ -7,6 +7,12 @@ on:
   #   - cron: "*/15 * * * *"
   workflow_dispatch:
 
+# Two overlapping runs would both see a record as missing and create it twice;
+# Netlify accepts exact-duplicate records.
+concurrency:
+  group: dns-sync
+  cancel-in-progress: false
+
 jobs:
   sync:
     runs-on: ubuntu-latest
